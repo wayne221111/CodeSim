@@ -1,332 +1,231 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
-#include <ctime>    
+#include <ctime>
 #include <cstdlib>
 #include <vector>
 #include <math.h>
-//#include "yp_random.h"
 #include "randomc.h"
-#include "LT.h"
+#include "ConvoCode.h"
+#include "LTCode.h"
 #include "statistics.h"
 #include <omp.h>
 #include <algorithm>
 #include <unistd.h>
 
-//#define K 1000
-int K;
-//#define Run (10000000000LL/K)
-long Run;
-//#define C 0.05
-//#define Delta 0.03
-double Delta;
-//#define STEPS 16
-int STEPS;
-#define MaxN (K*(1+Delta*(STEPS-1)))
-//int windowSize = 50;
-long histo_bins[16] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384};
-const int N_histo_bins = 16;
-
 using namespace std;
 using namespace CodeSim;
 
-//int M_encode[MaxN][K];				// 記錄 完整的 matrix 
-//int V_recover[K];					// 記錄 哪些 symbols 已經被 recover
-//int S_recover = K;					// 記錄 有幾個 bit 已解碼  = sum(V_recover);
-//int V_degree[MaxN];					// 記錄 M_encode 每個 code word 還有多少 degrees
-//int V_ripp[K];						// 記錄 還沒被使用的 degree one symbol    
-//int S_ripp = 0;						// 記錄 V_ripp 的個數 = nnz(V_ripp);    
-//
-//int M_code2sym[MaxN][K];			// 記錄每個 code 哪些 bit 有值
-//int S_code2sym[MaxN];
-//int M_sym2code[K][MaxN];            // 記錄反向連結 - 每個symbol連到哪幾個 codeword
-//int S_sym2code[K];                  // 反向連結的 size 
+int K;
+long Run;
+double Delta;
+int STEPS;
 
-//unsigned long ErrorCount[STEPS][16];
+long histo_bins[16] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384};
+const int N_histo_bins = 16;
 vector< vector<double> > histoErrorCount;
+vector< vector< vector< vector<int> > > > histoErrorPattern;
 
-//double BER[STEPS];
-vector< vector<double> > BER;
 int Dsize;
-
-
 int* Degree;
-//double* Omega;
-//int		Degree[10] = //{1,2,3,4,5,8,9,19,65,66};
-//		{1, 2, 3, 4, 5, 7, 9, 19, 59, 179};
-//double  Omega[10] = {7.9379E-02, 4.0129E-01, 1.0121E-01, 2.1679E-01, 5.0996E-02,
-//				5.8338E-05, 3.9740E-02, 7.7470E-02, 2.1520E-02, 1.1547E-02
-//};
-
-//uniformRandom *Rnd;
 int g_seed = (int)time(0);
 CRandomMersenne Rnd(g_seed);
-
 
 double* D;
 double* SD;
 
-
-double e = 1.05;					
-
 double* normolize(double* d){
-	int i;
-	double z = 0;
-	for(i=0;i<Dsize;i++){
-		if(d[i]<0) d[i] = -d[i];
-		z = z + d[i];
-	}
-	for(i=0;i<Dsize;i++) d[i] = d[i]/z;
-	return d;
+        int i;
+        double z = 0;
+        for(i=0;i<Dsize;i++){
+                if(d[i]<0) d[i] = -d[i];
+                z = z + d[i];
+        }
+        for(i=0;i<Dsize;i++) d[i] = d[i]/z;
+        return d;
 }
-
 
 int main(int argn, char **args){
-	
-	if(argn < 2) {
-		cerr << "Usage: histogram.out LT_distibution_file [histogram_file]"<<endl;
-		exit(1);
-	}
-	
-	ifstream dist_file(args[1]);
-	if(dist_file.fail()){
-		cerr << "File can not be opened: " << args[1]<<endl;
-		exit(1);
-	}
-	
-	string histo_filename;
-	if(argn == 2) {
-		histo_filename = args[1];
-		histo_filename += "_histo.txt";
-	}
-	else {
-		histo_filename = args[2];
-	}
+        if(argn < 4) {
+                cerr << "Usage: histogram.out LT_distibution_file convo_code_file interleaver_file [histogram_file]"<<endl;
+                exit(1);
+        }
+        ifstream dist_file(args[1]);
+        if(dist_file.fail()){
+                cerr << "File can not be opened: " << args[1] <<endl;
+                exit(1);
+        }
+        string histo_filename, pattern_filename;
+        if(argn == 4) {
+                histo_filename = args[1];
+                histo_filename += "_histo.txt";
+                pattern_filename = args[1];
+                pattern_filename += "_pattern";
+ }
+        else    histo_filename = args[4];
+        ofstream histo_file(histo_filename.c_str());
+        if(histo_file.fail()) {
+                cerr << "File can not be opened: " << histo_filename <<endl;
+                exit(1);
+        }
+        ofstream pattern_file(pattern_filename.c_str());
+        if(pattern_file.fail()) {
+                cerr << "File can not be opened: " << pattern_filename <<endl;
+                exit(1);
+        }
+        cout << "debug -1" << endl;
+        nice(20);
+        dist_file >> K;
+        K = 80640;
+        Run = 100;//(1000000000LL/K);
+        dist_file >> Dsize;
+        Degree = new int[Dsize];
+        D = new double[Dsize];
+        SD = new double[Dsize];
+        for (int i=0; i<Dsize; i++) {
+                dist_file >> Degree[i];
+        }
+        for (int i=0; i<Dsize; i++) {
+                dist_file >> D[i];
+        }
+        STEPS = 10;
+        Delta = 0.005;
+        histoErrorCount.assign(STEPS, vector<double>() ); //[step][histobin]
+        cout << "debug" << endl;
+        histoErrorPattern.assign(STEPS, vector< vector< vector<int> > >(N_histo_bins, vector< vector<int> >() ) );
+        {
+                histo_file << "tab of degree\t";
+                for (int i =0; i<Dsize; i++) {
+                        histo_file << Degree[i] << '\t';
+                }
+                histo_file << "\ndistribution\t";
+                for (int i =0; i<Dsize; i++) {
+                        histo_file << D[i] << '\t';
+                }
+                histo_file << "\nEpsilons\t";
+                for (int i = 0; i<STEPS; i++) {
+                        histo_file << i*Delta << '\t';
+                        histoErrorCount[i].assign(N_histo_bins,0);
+                }
+                histo_file << '\n';
 
-	
-	ofstream histo_file(histo_filename.c_str());
-	if(histo_file.fail()){
-		cerr << "File can not be opened: " << histo_filename <<endl;
-		exit(1);
-	}
-	
-	nice(20);
-	
-	dist_file >> K;
-	Run = 1000000;//(1000000000LL/K);
-	dist_file >> Dsize;
-	Degree = new int[Dsize];
-	D = new double[Dsize];
-	SD = new double[Dsize];
-	for (int i=0; i<Dsize; i++) {
-		dist_file >> Degree[i];
-	}
-	for (int i=0; i<Dsize; i++) {
-		dist_file >> D[i];
-	}
-	//dist_file >> STEPS >> Delta;
-	STEPS = 101;
-	Delta = 0.005;
-	histoErrorCount.assign(STEPS, vector<double>() );
-	BER.assign(STEPS, vector<double>());
-	vector<double> sum(STEPS,0), mean(STEPS,0), var(STEPS,0),
-					dev(STEPS,0), skew(STEPS,0), kurt(STEPS,0);
-	
-	double list_r[5] = {0, 0.0001, 0.001, 0.01, 0.1}, list_p[5] = {.9, .99, .999, .9999, .1};
-	const int N_of_r = 5, N_of_p = 5;
-	vector< vector<long> > BFailureCount(N_of_r, vector<long>(STEPS, 0));
-	vector<double> averageEpsilon(N_of_r, 0);
-	vector< vector<double> > r_epsilons(N_of_r, vector<double>(Run, 0));
-	
-	{
-		histo_file << "tab of degree\t";
-		for (int i =0; i<Dsize; i++) {
-			histo_file << Degree[i] << '\t';
-			
-		}
-		histo_file << "\ndistribution\t";
-		for (int i =0; i<Dsize; i++) {
-			histo_file << D[i] << '\t';
-			
-		}
-		histo_file << "\nEpsilons\t";
-		for (int i = 0; i<STEPS; i++) {
-			histo_file << i*Delta << '\t';
-			//BER[i] = 0;
-			histoErrorCount[i].assign(N_histo_bins,0);
-			BER[i].assign(Run,0);	
-		}
-		histo_file << '\n';
-		
-		if(histo_bins[N_histo_bins-1]<K)
-			histo_bins[N_histo_bins-1]=K;
-		double histo_bins_ratio[N_histo_bins];
-		for (int i=0; i<N_histo_bins; i++) {
-			histo_bins_ratio[i] = histo_bins[i]/double(K);
-			if (histo_bins_ratio[i]>1) {
-				histo_bins_ratio[i]=1;
-			}
-		}
-		
-		
-		int start_time = time(0);
-		//int n=0;
-		#pragma omp parallel for schedule(dynamic) num_threads(PARALLEL_THREADS)
-		for(long run=0;run<Run;run++){
-			int seed;
-			#pragma omp critical
-			seed = Rnd.BRandom();
-			
-			LT_sim<Bit> sim(K, 10*K, Dsize, Degree, D, seed);
+                double histo_bins_ratio[N_histo_bins];
 
-			long recievedSymbol = 0;
-			vector<bool> thresholdReached(N_of_r, 0);
-			
-			for (int i = 0; i< STEPS; i++) {
-				while (recievedSymbol <= K*(1+Delta*i) -.9) {
-					sim.receive(recievedSymbol);
-					recievedSymbol++;
-					
-					double t = sim.failureRate();
-					for (int r=0; r<N_of_r; r++) {
-						if (thresholdReached[r] == false && t<=list_r[r]+(1.0/K/10)) {
-							#pragma omp atomic
-							averageEpsilon[r] += (recievedSymbol-K)/(double)K/Run;
-							r_epsilons[r][run] = (recievedSymbol-K)/(double)K; 
-							thresholdReached[r] = true;
-						}
-					}
-				}
-				//sim.seqReceive( K*(1+Delta*i) -1);
-				//sim.decode();
-				double t = sim.failureRate();// = Encoder(K, K*(1.05+0.01*i), Dsize);
+                if(histo_bins[N_histo_bins-1]<K)
+                        histo_bins[N_histo_bins-1]=K;
+                for (int i=0; i<N_histo_bins; i++) {
+                        histo_bins_ratio[i] = histo_bins[i]/double(K);
+                        if (histo_bins_ratio[i]>1) {
+                                histo_bins_ratio[i]=1;
+                        }
+                }
+cout<<"debug 1" << endl;
+                int start_time = time(0);
 
-				for (int h=0; h<N_histo_bins; h++) {
-					if (t<=histo_bins_ratio[h]+(1.0/K/10)) {
-						#pragma omp atomic
-						histoErrorCount[i][h]++;
-						break;
-					}
-				}
+        //      #pragma omp parallel for schedule(dynamic) num_threads(PARALLEL_THREADS)
+                for(long run=0;run<Run;run++){
+                        int seed;
+        //              #pragma omp critical
+                        seed = Rnd.BRandom();
+cout <<"debug 2"<< endl;
 
-				BER[i][run]=t;
-				for (int j=0; j<N_of_r; j++) {
-					if (t>list_r[j]+(1.0/K/10)) {
-						#pragma omp atomic
-						BFailureCount[j][i]++;
-					}
-				}
+for (int i = 0; i< STEPS; i++) {
+                        Codeword<Bit> a;
+                        a.reserve(80640);
+                        for (int t=0; t<80640; t++) a.push_back(1);
+                        Codeword<Byte> b = BitToByteCoverter::convert(a);
+cout <<"debug 2.9" << endl;
+                                LT_sim<Byte> sim(b.size(), b.size()*(1+Delta*i), Dsize, Degree, D, seed);
+cout <<"debug 2.91" <<endl;
+        Codeword<Byte> c = sim.encode(b);
+cout << "debug 2.92" << endl;
+c = sim.decode(c);
+cout << "debug 2.93" << endl;
+                                vector<int>     tmp;
+cout << "debug 3" << endl;
+                                for (int k=0; k<c.size(); k++) if(c[k].isErased() ) tmp.push_back(k);
+                                double t = sim.failureRate();
+                                for (int h=0; h<N_histo_bins; h++) {
+                                        if (t<=histo_bins_ratio[h]+(1.0/K/10)) {
+        //                                      #pragma omp atomic
+                                                histoErrorCount[i][h]++;
+                                                histoErrorPattern[i][h].push_back(tmp);
+                                                break;
+                                        }
+                                }
+                        }
+                }
+                //histo_file<<"Histogram";
+                for (int i = 0; i<N_histo_bins; i++) {
+                        histo_file << histo_bins_ratio[i]<<'\t';
+                        for(int j = 0; j< STEPS; j++)
+                                histo_file <<  histoErrorCount[j][i] / (double)Run<< '\t';
+                        histo_file << '\n';
+                }
+                cout << "debug 4" << endl;
+                for(int j = 0; j< STEPS; j++) {
+                        pattern_file << "Epsilon: " << 1+Delta*j << endl;
+                        for (int i = 0; i<N_histo_bins; i++) {
+                                pattern_file << '\t' << histo_bins_ratio[i] << endl;
+                                for(int k = 0; k<histoErrorPattern[j][i].size(); k++) {
+                                        pattern_file << '\t' << '\t';
+                                        for(int l = 0; l<histoErrorPattern[j][i][k].size(); l++)
+                                                pattern_file << histoErrorPattern[j][i][k][l] << "  ";
+                                        pattern_file << endl;
+                                }
+                        }
+                }
+                histo_file << "Time\t" << time(0) - start_time<< "\tK\t"<< K << "\tRun\t"<< Run <<endl;
+        }
+/*      ConvoCode cc(args[2]);
+        int Layer = cc.getK();
+        unsigned long L = 80000*6/7/Layer;
+        Run = 10000//MAX_BIT / L;
+        Permutator<Bit> inter(args[3], true);
 
-			}
-			
-			bool allReached = false;
-			while (allReached == false) {
-				allReached = true;
-				sim.receive(recievedSymbol);
-				recievedSymbol++;
-				double t = sim.failureRate();
-				for (int r=0; r<N_of_r; r++) {
-					if (thresholdReached[r] == false && t<=list_r[r]+(1.0/K/10)) {
-						#pragma omp atomic
-						averageEpsilon[r] += (recievedSymbol-K)/(double)K/Run;
-						r_epsilons[r][run] = (recievedSymbol-K)/(double)K;
-						thresholdReached[r] = true;
-					}
-					
-					allReached &= thresholdReached[r];
-				}
-			}
-		}
-		//histo_file<<"Histogram";
-		for (int i = 0; i<N_histo_bins; i++) {
-			histo_file << histo_bins_ratio[i]<<'\t';
-			for(int j = 0; j< STEPS; j++)
-				histo_file <<  histoErrorCount[j][i] / (double)Run<< '\t';
-			histo_file << '\n';
-		}
-		
-		#pragma omp parallel for schedule(dynamic) num_threads(PARALLEL_THREADS)
-		for (int i = 0; i<STEPS; i++) {
-			computeStats(BER[i].begin( ), BER[i].end( ), sum[i], mean[i], var[i], dev[i], skew[i], kurt[i]);
-			sort(BER[i].begin( ), BER[i].end( ));
-		}
-		
-		histo_file << "Averaged r\t";
-		for (int i = 0; i<STEPS; i++) {
-			histo_file <<  mean[i]<< '\t';
-		}
-		histo_file << '\n';
-		for (int j=0; j<N_of_p; j++) {
-			histo_file << "p="<< list_p[j] <<"%\t";
-			for (int i = 0; i<STEPS; i++) {
-				histo_file <<  BER[i][Run*list_p[j]-0.9]<< '\t';
-			}
-			histo_file << '\n';
-		}
-		
-		for (int j=0; j<N_of_r; j++) {
-			histo_file << "r="<< list_r[j] <<"%\t";
-			for (int i = 0; i<STEPS; i++) {
-				histo_file <<  BFailureCount[j][i]/(double)Run<< '\t';
-			}
-			histo_file << '\n';
-		}
-		
-		for (int j=0; j<N_of_r; j++) {
-			histo_file << "pdf r="<< list_r[j]*100 <<"%\t";
-			histo_file <<  1-(BFailureCount[j][0]/(double)Run)<< '\t';
-			for (int i = 1; i<STEPS; i++) {
-				histo_file <<  (BFailureCount[j][i-1]-BFailureCount[j][i])/(double)Run<< '\t';
-			}
-			histo_file << '\n';
-		}
-		
-		for (int j=0; j<N_of_r; j++) {
-			histo_file << "r="<< list_r[j]*100 <<"%\t";
-			histo_file <<  averageEpsilon[j]<< '\t';
-			sort(r_epsilons[j].begin(), r_epsilons[j].end());
-			histo_file << r_epsilons[j][Run*0.9-0.9] - averageEpsilon[j]<< '\t'; // 90% error bar
-			histo_file << averageEpsilon[j] - r_epsilons[j][Run*0.1-0.9]<< '\t'; // 10% error bar
-			histo_file << '\n';
-		}
-		
-		
-		histo_file << "Variance\t";
-		for (int i = 0; i<STEPS; i++) {
-			histo_file <<  var[i]<< '\t';
-		}
-		histo_file << '\n';
-		histo_file << "standard deviation\t";
-		for (int i = 0; i<STEPS; i++) {
-			histo_file <<  dev[i]<< '\t';
-		}
-		histo_file << '\n';
-		histo_file << "Skewness\t";
-		for (int i = 0; i<STEPS; i++) {
-			histo_file <<  skew[i]<< '\t';
-		}
-		histo_file << '\n';
-		histo_file << "kurtosis\t";
-		for (int i = 0; i<STEPS; i++) {
-			histo_file <<  kurt[i]<< '\t';
-		}
-		histo_file << '\n';
-		
-		histo_file << "Time\t" << time(0) - start_time<< "\tK\t"<< K << "\tRun\t"<< Run <<endl;
-		
-//		for (int i=0; i<windowSize+1; i++) {
-//			histo_file << i;
-//			
-//			for (int j=0; j<STEPS; j++) {
-//				histo_file << '\t' << l0a[j][i]/(double)(Run*(K-windowSize+1));
-//			}
-//			histo_file << endl;
-//		}
-	}
-	
-	return 0;
+        Codeword<Bit> a;
+        a.reserve(Layer*L);
+        for (int t=0; t<Layer*L; t++)   a.push_back(Rnd.IRandomX(0, 1));
+        Codeword<Bit> b = cc.encode(a);
+        b = inter.permutate(b);
+
+        for (int s=0; s<STEPS; s++) {
+                for(int j=1; j<N_histo_bins; j++) {
+                        vector<unsigned long> total_err(Layer, 0);
+                        double Epsilon = (1+s*Delta) -1;
+                        vector<vector<bool> > histo_mask(Layer, vector<bool>(L+1,0));
+                        vector<map<unsigned long, unsigned long> > histo(Layer, map<unsigned long, unsigned long>());
+                        {
+                                #pragma omp parallel for schedule(dynamic) num_threads(PARALLEL_THREADS)
+                                for (int i=0; i<Run; i++) {
+                                        vector<unsigned long> err(Layer, 0);
+                                        Codeword<Byte> b1 = BitToByteCoverter::convert(b);
+                                        int tmp = histoErrorPattern[s][j].size();
+                                        tmp = Rnd.IRandomX(0, tmp-1);
+                                        tmp = histoErrorPattern[s][j][tmp].size();
+                                        for (int k=0; k<tmp; k++) {
+                                                int index = histoErrorPattern[s][j][tmp][k];
+                                                b1[index].setErased(True);
+                                        }
+                                        Codeword<Bit> c1 = BitToByteCoverter::revert(b1);
+                                        c1 = inter.depermutate(c1);
+                                        Codeword<Bit> c = cc.decode(c1);
+                                        for (int k=0; k<c.size(); k++) {
+                                                if (!(a[k] == c[k])) {
+                                                        err[k%Layer]++;
+                                                }
+                                        }
+                                        for (int k=0; k<Layer; k++) {
+                                                #pragma omp atomic
+                                                total_err[k]+=err[k];
+                                        }
+                                }
+                        }
+                        vector<double> avr_err_rate(Layer, 0);
+                        for (int i=0; i<Layer; i++)
+                                avr_err_rate[i] = total_err[i]/L/Run;
+                }
+        } */
+        return 0;
 }
-
-
-
 
