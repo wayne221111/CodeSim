@@ -1,0 +1,24 @@
+# lines start with # are comments
+# empty line is relevant
+# block size and Run per simulation
+1000 10000
+# Number of tags
+10
+#Tags
+1 2 3 4 5 7 9 19 59 179
+# initial distribution
+5.5866E-03	5.0000E-01	1.6667E-01	8.3333E-02	5.0000E-02	2.3810E-02	1.3889E-02	2.6316E-03	2.9200E-04	1.5379E-01
+# STEPS and Delta
+61 0.005
+# cubic fitting: ON=1 OFF=0
+0
+# error exponent: ON=1 OFF=0
+0
+# BER at target epsilons
+0.05 0.2
+# weighting of BER at target epsilons
+1 1
+# Epsilon at target BER
+0.1 0.01
+# weighting of Epsilon at target BER
+1 1

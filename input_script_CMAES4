@@ -1,0 +1,20 @@
+# lines start with # are comments
+# empty line is relevant
+# block size and Run per simulation
+200 1000
+# Number of tags
+20
+#Tags
+1	2	3	4	5	7	8	11	16	19	23	32	41	53	64	83	101	128	163	199
+# initial distribution
+0.005025126	0.5	0.166666667	0.083333333	0.05	0.023809524	0.017857143	0.009090909	0.004166667	0.002923977	0.001976285	0.001008065	0.000609756	0.000362845	0.000248016	0.000146929	9.90099E-05	6.15157E-05	3.78702E-05	0.132576365
+# STEPS and Delta
+1001 0.001
+# minimum acceptable failure ratio rho_tilde
+0.01
+# acceptable block failure rate
+0.01
+# target epsilon
+0.1
+# optimization parameter rho=1 block_failure_rate=2 epsilon=3
+1
